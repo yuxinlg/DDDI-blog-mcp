@@ -26,23 +26,29 @@ def parse_transcript(vtt_path: str) -> str:
 
 
 @mcp.tool()
-def save_draft(content: str, filename: str = "") -> str:
+def save_draft(content: str, filename: str = "", meeting_date: str = "") -> str:
     """Save a blog post draft as a markdown file in the drafts/ folder.
+    Always overwrites any existing file with the same name.
 
     Args:
         content: The full markdown content of the blog post.
         filename: Optional filename (e.g. "2026-03-20-agentic-coding.md").
-                  Defaults to today's date + "-draft.md".
+                  If omitted, defaults to meeting_date (or today) + "-draft.md".
+        meeting_date: Optional ISO date of the meeting (e.g. "2026-03-19").
+                      Used as the filename prefix when no filename is given,
+                      so re-runs of the same meeting always overwrite the same file.
     """
     drafts = pathlib.Path(__file__).parent / "drafts"
     drafts.mkdir(exist_ok=True)
     if not filename:
-        filename = datetime.date.today().isoformat() + "-draft.md"
+        date_prefix = meeting_date if meeting_date else datetime.date.today().isoformat()
+        filename = date_prefix + "-draft.md"
     if not filename.endswith(".md"):
         filename += ".md"
     out = drafts / filename
     out.write_text(content, encoding="utf-8")
-    return f"Draft saved to: {out}"
+    action = "Overwritten" if out.exists() else "Saved"
+    return f"{action}: {out}"
 
 
 if __name__ == "__main__":
