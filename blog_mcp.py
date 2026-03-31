@@ -6,13 +6,8 @@ mcp = FastMCP("blog-generator")
 BLOG_REPO = pathlib.Path.home() / "DDDI_DP_Blog"
 
 
-@mcp.tool()
-def parse_transcript(vtt_path: str) -> str:
-    """Parse a Zoom .vtt transcript file into clean speaker-labeled text.
-
-    Args:
-        vtt_path: Absolute path to a .vtt transcript file from Zoom.
-    """
+def _parse_vtt(vtt_path: str) -> str:
+    """Internal helper: parse a single .vtt file into clean text."""
     text = pathlib.Path(vtt_path).expanduser().read_text(encoding="utf-8")
     lines = []
     for line in text.splitlines():
@@ -25,6 +20,51 @@ def parse_transcript(vtt_path: str) -> str:
             continue
         lines.append(stripped)
     return "\n".join(lines)
+
+
+def _date_from_path(vtt_path: str) -> str:
+    """Extract ISO date from a VTT filename like GMT20260319-*.vtt → '2026-03-19'."""
+    name = pathlib.Path(vtt_path).name
+    m = re.search(r"GMT(\d{4})(\d{2})(\d{2})", name)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    return pathlib.Path(vtt_path).parent.name  # fall back to folder name
+
+
+@mcp.tool()
+def parse_transcript(vtt_path: str, vtt_path2: str = "") -> str:
+    """Parse one or two Zoom .vtt transcript files into clean labeled text.
+
+    When two paths are provided the output is clearly separated by date so
+    Claude can identify overlapping topics and distribute content evenly:
+    Date1 content fully included; Date2 contributes only what is new
+    (Date2 \\ Date1 in topic space).
+
+    Args:
+        vtt_path:  Absolute path to the first .vtt transcript file.
+        vtt_path2: Optional absolute path to a second .vtt transcript file.
+                   When supplied, both transcripts are returned labeled by date.
+    """
+    date1 = _date_from_path(vtt_path)
+    text1 = _parse_vtt(vtt_path)
+
+    if not vtt_path2:
+        return text1
+
+    date2 = _date_from_path(vtt_path2)
+    text2 = _parse_vtt(vtt_path2)
+
+    separator = "=" * 60
+    return (
+        f"{separator}\n"
+        f"TRANSCRIPT 1 — {date1}\n"
+        f"{separator}\n"
+        f"{text1}\n\n"
+        f"{separator}\n"
+        f"TRANSCRIPT 2 — {date2}\n"
+        f"{separator}\n"
+        f"{text2}"
+    )
 
 
 @mcp.tool()

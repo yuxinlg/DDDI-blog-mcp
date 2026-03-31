@@ -36,13 +36,33 @@ This project converts Zoom meeting transcripts (.vtt files) into blog post draft
 
 ## Standard workflow
 
-When asked to generate a blog post:
+### Single transcript
 
-1. Use `parse_transcript` tool with the provided .vtt file path
-2. Read the clean transcript carefully for main themes, the chronological flow of discussion, and concrete takeaways
+When asked to generate a blog post from one meeting:
+
+1. Use `parse_transcript(vtt_path)` with the single VTT file path
+2. Read the clean transcript carefully for main themes, chronological flow, and concrete takeaways
 3. Write the blog post draft in markdown following the guidelines above
-4. Use `save_draft` tool to save it — always pass `meeting_date` (ISO format, e.g. `"2026-03-19"`) extracted from the VTT filename, so re-running always overwrites the same file instead of creating a new one. Use a descriptive `filename` if the user specifies one.
+4. Use `save_draft` — always pass `meeting_date` (ISO format, e.g. `"2026-03-19"`) extracted from the VTT filename, so re-running always overwrites the same file. Use a descriptive `filename` if the user specifies one.
 5. Tell the user exactly where the draft was saved and suggest 1–2 edits they might want to make
+
+### Two transcripts
+
+When asked to generate a blog post from two meetings (e.g. "Mar 19 and Mar 20"):
+
+1. Use `parse_transcript(vtt_path, vtt_path2)` with both VTT file paths — the tool returns both transcripts labeled by date
+2. Read both transcripts and **map topics across dates**:
+   - List topics from Date1
+   - List topics from Date2
+   - Mark which topics appear in both (overlap) vs. unique to each
+3. **Content rule — treat it like a set union:**
+   - Include Date1 content in full
+   - From Date2, include **only topics not already covered in Date1** (Date2 \ Date1). If a topic appears in both dates, use the richer/more detailed discussion and drop the duplicate — do NOT summarize it twice
+   - If the same topic evolved or deepened between sessions (e.g. a tool discussed briefly in Date1 and more deeply in Date2), you may note the progression briefly rather than treating it as pure duplication
+4. **Length distribution:** divide the target word count evenly between the unique contribution of each date. If Date1 has 3 unique topics and Date2 has 1 unique topic, allocate proportionally (~75%/25%), not mechanically 50/50
+5. **Intro:** note that this post draws from discussions across both [Date1] and [Date2] sessions
+6. **Takeaways list:** draw from both dates, deduplicating any that are semantically identical
+7. Use `save_draft` with `meeting_date` set to the earlier date and a descriptive `filename` that reflects the combined scope (e.g. `"2026-03-19-2026-03-20-agentic-tools.md"`)
 
 ## Publishing workflow
 
