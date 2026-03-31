@@ -148,6 +148,26 @@ def publish_to_blog(
     post_filename = f"{date_prefix}-{post_slug}.md"
     branch = f"post/{date_prefix}-{post_slug}"
 
+    # Guard: refuse to proceed if the branch already exists locally or remotely
+    existing_local = subprocess.run(
+        ["git", "-C", str(BLOG_REPO), "branch", "--list", branch],
+        capture_output=True, text=True
+    ).stdout.strip()
+    existing_remote = subprocess.run(
+        ["git", "-C", str(BLOG_REPO), "ls-remote", "--heads", "origin", branch],
+        capture_output=True, text=True
+    ).stdout.strip()
+    if existing_local or existing_remote:
+        return (
+            f"⛔ Branch '{branch}' already exists "
+            f"({'locally' if existing_local else ''}{'and ' if existing_local and existing_remote else ''}{'on remote' if existing_remote else ''}).\n"
+            f"This post has already been published. To avoid duplicates, no action was taken.\n"
+            f"If you want to update the post, edit the file directly on that branch and push:\n"
+            f"  git -C ~/DDDI_DP_Blog checkout {branch}\n"
+            f"  # edit _posts/{post_filename}, then:\n"
+            f"  git add _posts/{post_filename} && git commit -m 'Update draft' && git push"
+        )
+
     author_link = f"[{author_name}]({author_url})" if author_url else author_name
 
     frontmatter = f"""---
