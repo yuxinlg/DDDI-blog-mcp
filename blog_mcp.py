@@ -1,7 +1,9 @@
 from mcp.server.fastmcp import FastMCP
-import re, pathlib, datetime
+import re, pathlib, datetime, subprocess
 
 mcp = FastMCP("blog-generator")
+
+BLOG_REPO = pathlib.Path.home() / "DDDI_DP_Blog"
 
 
 @mcp.tool()
@@ -26,9 +28,10 @@ def parse_transcript(vtt_path: str) -> str:
 
 
 @mcp.tool()
-def save_draft(content: str, filename: str = "", meeting_date: str = "") -> str:
+def save_draft(content: str, filename: str = "", meeting_date: str = "", save_raw: bool = True) -> str:
     """Save a blog post draft as a markdown file in the drafts/ folder.
-    Always overwrites any existing file with the same name.
+    Always overwrites the working copy. Optionally saves a raw reference copy
+    that is never overwritten on re-runs (for side-by-side comparison).
 
     Args:
         content: The full markdown content of the blog post.
@@ -37,6 +40,8 @@ def save_draft(content: str, filename: str = "", meeting_date: str = "") -> str:
         meeting_date: Optional ISO date of the meeting (e.g. "2026-03-19").
                       Used as the filename prefix when no filename is given,
                       so re-runs of the same meeting always overwrite the same file.
+        save_raw: If True (default), also saves an untouched copy to drafts/raw/
+                  the first time — never overwritten, for reference/comparison.
     """
     drafts = pathlib.Path(__file__).parent / "drafts"
     drafts.mkdir(exist_ok=True)
@@ -47,8 +52,110 @@ def save_draft(content: str, filename: str = "", meeting_date: str = "") -> str:
         filename += ".md"
     out = drafts / filename
     out.write_text(content, encoding="utf-8")
-    action = "Overwritten" if out.exists() else "Saved"
-    return f"{action}: {out}"
+    msg = f"Draft saved: {out}"
+
+    if save_raw:
+        raw_dir = drafts / "raw"
+        raw_dir.mkdir(exist_ok=True)
+        raw_out = raw_dir / filename
+        if not raw_out.exists():  # never overwrite raw — it's the reference copy
+            raw_out.write_text(content, encoding="utf-8")
+            msg += f"\nRaw reference copy saved: {raw_out}"
+        else:
+            msg += f"\nRaw reference copy already exists (not overwritten): {raw_out}"
+
+    return msg
+
+
+@mcp.tool()
+def publish_to_blog(
+    draft_filename: str,
+    post_slug: str,
+    post_title: str,
+    post_subtitle: str = "",
+    author_name: str = "DDDI AI Fellow Gathering",
+    author_url: str = "",
+    author_pic: str = "/assets/images/authors/dddi.png",
+    author_title: str = "Postdoctoral Researchers, DDDI",
+    summary: str = "",
+    meeting_date: str = "",
+) -> str:
+    """Copy a reviewed draft to DDDI_DP_Blog, inject Jekyll frontmatter,
+    create a post/YYYY-MM-DD-slug branch, push, and open a draft PR.
+
+    Args:
+        draft_filename: Filename in drafts/ (e.g. "2026-03-19-draft.md")
+        post_slug: URL-friendly slug (e.g. "agentic-coding-postdocs")
+        post_title: Full post title
+        post_subtitle: Optional subtitle
+        author_name: Display name — use "DDDI AI Fellow Gathering" for group posts
+        author_url: URL for author link (leave blank if none)
+        author_pic: Path to author photo in assets/images/authors/
+        author_title: Author credentials line
+        summary: 1-2 sentence summary for the homepage card
+        meeting_date: ISO date of the meeting (e.g. "2026-03-19"), used for branch/filename
+    """
+    drafts = pathlib.Path(__file__).parent / "drafts"
+    draft_path = drafts / draft_filename
+    content = draft_path.read_text(encoding="utf-8")
+
+    # Strip existing H1 title from draft (Jekyll renders title from frontmatter)
+    lines = content.splitlines()
+    if lines and lines[0].startswith("# "):
+        content = "\n".join(lines[1:]).lstrip("\n")
+
+    date_prefix = meeting_date if meeting_date else datetime.date.today().isoformat()
+    post_filename = f"{date_prefix}-{post_slug}.md"
+    branch = f"post/{date_prefix}-{post_slug}"
+
+    author_link = f"[{author_name}]({author_url})" if author_url else author_name
+
+    frontmatter = f"""---
+layout: blog
+title: "{post_title}"
+subtitle: "{post_subtitle}"
+authors: ["{author_link}"]
+author_pic: ["{author_pic}"]
+author_title: ["{author_title}"]
+date: {date_prefix}
+permalink: /{post_slug}/
+summary: "{summary}"
+---
+"""
+    final_content = frontmatter + "\n" + content
+    post_path = BLOG_REPO / "_posts" / post_filename
+
+    def git(args):
+        subprocess.run(["git", "-C", str(BLOG_REPO)] + args, check=True)
+
+    git(["checkout", "main"])
+    git(["pull", "origin", "main"])
+    git(["checkout", "-b", branch])
+    post_path.write_text(final_content, encoding="utf-8")
+    git(["add", str(post_path)])
+    git(["commit", "-m", f"Draft post: {post_title}"])
+    git(["push", "-u", "origin", branch])
+
+    result = subprocess.run(
+        [
+            "gh", "pr", "create",
+            "--title", f"Post: {post_title}",
+            "--body", f"Auto-generated from Zoom transcript ({meeting_date}). Ready for editing.\n\n**Checklist before merging:**\n- [ ] Review and edit content\n- [ ] Add author photo to `assets/images/authors/` if needed\n- [ ] Add cover image to `assets/images/posts/`\n- [ ] Update `permalink` and `summary` in frontmatter\n- [ ] Update homepage `featured_posts` in `index.md` if featuring this post",
+            "--draft",
+            "--repo", "dddiscovery/datapoints",
+        ],
+        capture_output=True, text=True, cwd=str(BLOG_REPO)
+    )
+    pr_url = result.stdout.strip()
+    return (
+        f"Branch created: {branch}\n"
+        f"Post file: {post_path}\n"
+        f"Draft PR: {pr_url}\n\n"
+        f"Next steps:\n"
+        f"  1. Open the PR and edit the post in Cursor on branch '{branch}'\n"
+        f"  2. Add cover image to DDDI_DP_Blog/assets/images/posts/\n"
+        f"  3. Mark PR ready → merge to main when satisfied"
+    )
 
 
 if __name__ == "__main__":

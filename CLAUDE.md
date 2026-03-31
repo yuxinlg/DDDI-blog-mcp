@@ -44,6 +44,25 @@ When asked to generate a blog post:
 4. Use `save_draft` tool to save it — always pass `meeting_date` (ISO format, e.g. `"2026-03-19"`) extracted from the VTT filename, so re-running always overwrites the same file instead of creating a new one. Use a descriptive `filename` if the user specifies one.
 5. Tell the user exactly where the draft was saved and suggest 1–2 edits they might want to make
 
+## Publishing workflow
+
+When asked to publish a draft to the blog:
+
+1. Use `publish_to_blog` tool with:
+   - `draft_filename`: the file in `drafts/` (e.g. `"2026-03-19-draft.md"`)
+   - `post_slug`: short URL-friendly slug from the title (e.g. `"agentic-coding-postdocs"`)
+   - `post_title`: the H1 title from the draft
+   - `post_subtitle`: subtitle if present in the draft
+   - `summary`: 1–2 sentence summary for the homepage card
+   - `meeting_date`: ISO date extracted from the VTT filename (e.g. `"2026-03-19"`)
+   - Leave `author_name`, `author_pic`, `author_title` as defaults for group/AI-fellow posts
+2. The tool creates branch `post/YYYY-MM-DD-slug` in `~/DDDI_DP_Blog`, writes the post with Jekyll frontmatter, pushes, and opens a draft PR at `github.com/dddiscovery/datapoints`
+3. Tell the user the PR URL and remind them to:
+   - Edit the post in Cursor on the new branch
+   - Add a cover image to `assets/images/posts/`
+   - Update `index.md` homepage `featured_posts` if this post should be featured
+   - Mark the PR as ready and merge to `main` when done
+
 ## Transcript file locations
 
 Transcripts are stored in:
